@@ -1,0 +1,11 @@
+.venv/
+.idea/
+__pycache__/
+**/input/*
+!**/.gitkeep
+!01_download/input/config.json
+02_preprocessing/output/*
+03_annotation/output/*
+04_features/output/*
+05_model/output/*
+06_inference/output/*

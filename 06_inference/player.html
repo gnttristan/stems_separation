@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<style>
+body { font: 15px system-ui; margin: 0; color: #555; }
+audio { width: 100%; margin: 12px 0; }
+button { padding: 12px; border: 1px solid #aaa; border-radius: 8px; font: inherit; }
+#play { cursor: pointer; }
+.stems { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.stem { background: #eee; color: #555; opacity: 1; }
+.stem.active { background: #22c55e; color: #052e16; border-color: #16a34a; box-shadow: 0 0 10px #22c55e80; }
+h3 { margin: 12px 0 6px; font-size: 15px; }
+#expected-message { font-size: 13px; margin-top: 6px; }
+#status { margin-top: 12px; }
+</style>
+<button id="play" type="button">Play song</button>
+<audio id="audio" controls preload="metadata" src="data:audio/wav;base64,__AUDIO__"></audio>
+<h3>Expected</h3>
+<div id="expected-stems" class="stems" aria-label="Expected stems"></div>
+<div id="expected-message"></div>
+<h3>Predicted</h3>
+<div id="stems" class="stems" aria-label="Predicted stems"></div>
+<div id="status">Ready</div>
+<script>
+const labels = __LABELS__;
+const stems = __STEMS__;
+const audio = document.getElementById('audio');
+const play = document.getElementById('play');
+const status = document.getElementById('status');
+function createButtons(id, order) {
+  return ['drums', 'vocals', 'bass', 'other'].map(stem => {
+    const button = document.createElement('button');
+    button.className = 'stem';
+    button.textContent = stem === 'other' ? 'Others' : stem[0].toUpperCase() + stem.slice(1);
+    button.disabled = true;
+    button.setAttribute('aria-pressed', 'false');
+    document.getElementById(id).appendChild(button);
+    return {button, column: order.indexOf(stem)};
+  });
+}
+const rows = [
+  {buttons: createButtons('expected-stems', __EXPECTED_STEMS__), labels: __EXPECTED__},
+  {buttons: createButtons('stems', stems), labels},
+];
+document.getElementById('expected-message').textContent = __EXPECTED_MESSAGE__;
+let animation;
+function update() {
+  const frame = Math.floor(audio.currentTime / 0.01);
+  const playing = !audio.paused && !audio.ended && !audio.seeking;
+  rows.forEach(row => row.buttons.forEach(({button, column}) => {
+    const active = playing && row.labels?.[frame]?.[column] === 1;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', String(active));
+  }));
+  play.textContent = audio.paused || audio.ended ? 'Play song' : 'Pause';
+  status.textContent = `${audio.currentTime.toFixed(2)} s · Frame ${frame}`;
+}
+function tick() {
+  update();
+  if (!audio.paused && !audio.ended) animation = requestAnimationFrame(tick);
+}
+play.onclick = async () => {
+  if (!audio.paused) return audio.pause();
+  try { await audio.play(); }
+  catch (error) { status.textContent = `Playback failed: ${error.message}`; }
+};
+audio.addEventListener('play', () => { cancelAnimationFrame(animation); tick(); });
+['pause', 'ended'].forEach(event => audio.addEventListener(event, () => {
+  cancelAnimationFrame(animation);
+  update();
+}));
+['seeking', 'seeked', 'timeupdate'].forEach(event => audio.addEventListener(event, update));
+audio.addEventListener('error', () => { status.textContent = 'Could not play this audio.'; });
+</script>
+</html>

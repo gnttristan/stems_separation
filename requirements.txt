@@ -1,0 +1,8 @@
+numpy>=1.26.4,<2
+scipy
+pandas
+yt-dlp
+demucs==4.0.1
+torch<2.6
+torchaudio<2.6
+streamlit>=1.64
