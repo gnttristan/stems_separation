@@ -3,7 +3,7 @@ import numpy as np
 import torch
 from torch import nn
 from common import ROOT, STEMS, folders, link
-from temporal_model import TemporalCNN, sequence_data, batch_windows, save_model, load_model
+from temporal_model import TemporalCNN, sequence_data, batch_windows, save_model, load_model, device
 
 
 def collect_tracks(source):
@@ -49,12 +49,13 @@ def split_frames(x, y, tracks, output, rng):
 @torch.no_grad()
 def evaluate(x, y, model, indices):
     model.eval()
+    target = next(model.parameters()).device
     loss, count = 0., 0
     tp, fp, fn, support = np.zeros((4, len(STEMS)))
     for start in range(0, len(indices), 128):
         batch = indices[start:start + 128]
         labels = y[batch]
-        p = model(batch_windows(x, batch)).sigmoid().numpy().astype(float)
+        p = model(batch_windows(x, batch, target)).sigmoid().cpu().numpy().astype(float)
         predicted = p >= .5
         p = np.clip(p, 1e-7, 1 - 1e-7)
         loss -= np.sum(labels * np.log(p) + (1 - labels) * np.log1p(-p))
@@ -72,12 +73,14 @@ def evaluate(x, y, model, indices):
 def train_epoch(x, y, model, training, rng, optimizer):
     model.train()
     total_loss = 0.
+    target = next(model.parameters()).device
     shuffled = rng.permutation(training)
     for start in range(0, len(shuffled), 128):
         indices = shuffled[start:start + 128]
         optimizer.zero_grad(set_to_none=True)
-        logits = model(batch_windows(x, indices))
-        loss = nn.functional.binary_cross_entropy_with_logits(logits, torch.from_numpy(y[indices]).float())
+        logits = model(batch_windows(x, indices, target))
+        labels = torch.from_numpy(y[indices]).float().to(target)
+        loss = nn.functional.binary_cross_entropy_with_logits(logits, labels)
         total_loss += loss.item() * len(indices)
         loss.backward()
         optimizer.step()
@@ -86,7 +89,9 @@ def train_epoch(x, y, model, training, rng, optimizer):
 
 def train(x, y, training, validation, output, rng, epochs=50):
     torch.manual_seed(42)
-    model = TemporalCNN(x[0].shape[1])
+    target = device()
+    print(f'Torch device: {target}', flush=True)
+    model = TemporalCNN(x[0].shape[1]).to(target)
     optimizer = torch.optim.Adam(model.parameters(), lr=.001, weight_decay=1e-4)
     history, best_loss, best_epoch = [], np.inf, 0
     for epoch in range(1, epochs + 1):
